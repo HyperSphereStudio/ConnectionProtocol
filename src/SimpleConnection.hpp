@@ -2,7 +2,7 @@
 #include <stdint.h>
 #include <cstring>
 
-#ifdef EXPORT_WINDOWS
+#if defined(_WIN32)
     #define EXPORT extern "C" __declspec(dllexport)
     #warning Exporting to windows!
 #else

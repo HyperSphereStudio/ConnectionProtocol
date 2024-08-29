@@ -6,8 +6,7 @@ run(`$(git()) config --global user.email "bizzanoj@my.erau.edu"`)
 const repo_user = "HyperSphereStudio"
 
 const VERSION = "0.4.3"
-const deploy_local = true
-const skip_build = true
+const deploy_local = false
 const tarball_name = "build_tarballs"
 
 #Delete Past Product Directory

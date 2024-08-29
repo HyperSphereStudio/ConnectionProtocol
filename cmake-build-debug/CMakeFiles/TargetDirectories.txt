@@ -1,0 +1,3 @@
+C:/Users/johna/OneDrive/GNSS/JohnB/CCRepo/ConnectionProtocol/cmake-build-debug/CMakeFiles/ConnectionProtocol.dir
+C:/Users/johna/OneDrive/GNSS/JohnB/CCRepo/ConnectionProtocol/cmake-build-debug/CMakeFiles/edit_cache.dir
+C:/Users/johna/OneDrive/GNSS/JohnB/CCRepo/ConnectionProtocol/cmake-build-debug/CMakeFiles/rebuild_cache.dir

@@ -9,7 +9,7 @@
 					"jsonFile" : "directory-.-Debug-d0094a50bb2071803777.json",
 					"minimumCMakeVersion" : 
 					{
-						"string" : "3.28"
+						"string" : "3.1"
 					},
 					"projectIndex" : 0,
 					"source" : ".",
@@ -39,7 +39,7 @@
 				{
 					"directoryIndex" : 0,
 					"id" : "ConnectionProtocol::@6890427a1f51a3e7e1df",
-					"jsonFile" : "target-ConnectionProtocol-Debug-c1c9d2ff97c77734179f.json",
+					"jsonFile" : "target-ConnectionProtocol-Debug-9c58f928daedbc6164b6.json",
 					"name" : "ConnectionProtocol",
 					"projectIndex" : 0
 				}

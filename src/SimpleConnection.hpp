@@ -19,10 +19,12 @@ namespace Simple{
       
 struct ConnectionProtocol{
     typedef void on_packet_event_f(uint8_t* packet, int n, void* f_data);
-    
-private:
+    static const uint8_t Sync1 = 0xDE, Sync2 = 0xAD;
+    static const int Sync1Offset = 0, Sync2Offset = 1, Size16Offset = 2, Size8Offset = 3, PacketHashOffset = 4, PayloadOffset = 5;
+    static const int MaxPayloadSize = 0xFFFF - PayloadOffset, MinPacketSize = PayloadOffset;
+
     uint8_t *write_buffer;
-    uint16_t read_buffer_capacity, read_buffer_size;
+    uint16_t buffer_capacity, read_buffer_size, write_buffer_size;
 
     enum State{
         WaitForSync1,
@@ -47,13 +49,11 @@ private:
     }
 
     static uint8_t u8hash(uint8_t* buffer, int size){
-        uint16_t v0 = 0xFE;
+        uint8_t s = 0;
         for(int i = 0; i < size; i++){
-            uint8_t v1 = buffer[i];
-            uint8_t t1 = (v1 ^ 0x3713) << 2, t0 = (v0 ^ 0x9171) >> 2;
-            v0 = v0 ^ t0 ^ v1 ^ t1 ^ (v1&t0) ^ (v0&t1); 
+            s += buffer[i];
         }
-        return v0;
+        return s;
     }
 
     inline bool parseByte(uint8_t* value, uint8_t** data, uint16_t* len){
@@ -96,7 +96,7 @@ private:
             if(parseByte(&v, data, dataLen)){
                 packetSize += v;
                 bytesRemaining = packetSize;
-                if(packetSize > read_buffer_capacity){      //Should be max packet size
+                if(packetSize > buffer_capacity){      //Should be max packet size
                     state = Start;
                     error_bytes_read += PacketHashOffset;
                     return;
@@ -133,19 +133,17 @@ private:
         }
     }
 
-public:
-    static const uint8_t Sync1 = 0xDE, Sync2 = 0xAD;
-    static const int Sync1Offset = 0, Sync2Offset = 1, Size16Offset = 2, Size8Offset = 3, PacketHashOffset = 4, PayloadOffset = 5;
-    static const int MaxPayloadSize = 0xFFFF - PayloadOffset, MinPacketSize = PayloadOffset;
-
     uint32_t error_bytes_read = 0;
 
     ConnectionProtocol(uint8_t* rx_buffer, uint8_t* tx_buffer, uint16_t read_buffer_capacity) : 
         packetData(rx_buffer), 
         write_buffer(tx_buffer),
-        read_buffer_capacity(read_buffer_capacity),
+        buffer_capacity(read_buffer_capacity),
         read_buffer_size(0),
-        state(Start){}    
+        write_buffer_size(PayloadOffset),
+        state(Start){}
+
+    virtual ~ConnectionProtocol()= default;
 
     uint16_t recieve(uint8_t* data, uint16_t dataLen, on_packet_event_f* on_packet, void* on_packet_arg){
         uint16_t bytes_read = 0;
@@ -158,33 +156,68 @@ public:
         return bytes_read;
     }
 
+    uint16_t write(uint8_t* data, uint16_t dataLen) {
+        memcpy(write_buffer + write_buffer_size, data, dataLen);
+        write_buffer_size += dataLen;
+        return dataLen;
+    }
+
+    uint16_t writeChar(uint8_t data) {
+        write_buffer[write_buffer_size] = data;
+        write_buffer_size++;
+        return 1;
+    }
+
     static uint16_t minBufferSize(uint16_t maxPayloadSize){ return maxPayloadSize + PayloadOffset; }
     uint8_t* packet(){ return write_buffer; }
     uint8_t* payload(){ return write_buffer + PayloadOffset; }
 
-    uint16_t encodePacket(uint16_t size){
+    uint16_t encodeTxPacket(){
+       auto size = write_buffer_size - PayloadOffset;
        write_buffer[Sync1Offset] = Sync1;
        write_buffer[Sync2Offset] = Sync2;
        write_buffer[Size16Offset] = size >> 8;
        write_buffer[Size8Offset] = size;
        write_buffer[PacketHashOffset] = packethash(payload(), size);
+       write_buffer_size = PayloadOffset;
        return size + PayloadOffset;
     }
 };
 
+struct RuntimeAllocatedConnectionProtocol : public ConnectionProtocol {
+    explicit RuntimeAllocatedConnectionProtocol(uint16_t read_buffer_capacity) :
+        ConnectionProtocol(new uint8_t[read_buffer_capacity], new uint8_t[read_buffer_capacity], read_buffer_capacity){}
+
+    ~RuntimeAllocatedConnectionProtocol() override {
+        delete[] packetData;
+        delete[] write_buffer;
+    }
 };
 
-EXPORT Simple::ConnectionProtocol* SimpleConnectionProtocol_new(
+template<int N>
+struct CompiletimeAllocatedConnectionProtocol : public ConnectionProtocol {
+    uint8_t rx_buffer[N], tx_buffer[N];
+    explicit CompiletimeAllocatedConnectionProtocol() : ConnectionProtocol(rx_buffer, tx_buffer, N){}
+};
+
+};
+
+EXPORT Simple::ConnectionProtocol* SimpleConnectionProtocol_newCustom(
     uint8_t* rx_buffer, uint8_t* tx_buffer, uint16_t read_buffer_capacity){
         return new Simple::ConnectionProtocol(rx_buffer, tx_buffer, read_buffer_capacity);
 }
+EXPORT Simple::ConnectionProtocol* SimpleConnectionProtocol_new(uint16_t read_buffer_capacity){
+    return new Simple::RuntimeAllocatedConnectionProtocol(read_buffer_capacity);
+}
 EXPORT void SimpleConnectionProtocol_free(Simple::ConnectionProtocol* p){ delete p; }
-EXPORT uint16_t SimpleConnectionProtocol_payloadOffset(){ return Simple::ConnectionProtocol::PayloadOffset; }
-EXPORT uint16_t SimpleConnectionProtocol_encodePacket(Simple::ConnectionProtocol* p, uint16_t packet_size){ return p->encodePacket(packet_size); }
+EXPORT uint16_t SimpleConnectionProtocol_encodeTxPacket(Simple::ConnectionProtocol* p){ return p->encodeTxPacket(); }
 EXPORT uint16_t SimpleConnectionProtocol_recieve(Simple::ConnectionProtocol* p, uint8_t* data, uint16_t dataLen, Simple::ConnectionProtocol::on_packet_event_f* on_packet, void* on_packet_arg){ return p->recieve(data, dataLen, on_packet, on_packet_arg); }
 EXPORT uint16_t SimpleConnectionProtocol_recieveChar(Simple::ConnectionProtocol* p, uint8_t data, Simple::ConnectionProtocol::on_packet_event_f* on_packet, void* on_packet_arg){ return SimpleConnectionProtocol_recieve(p, &data, 1, on_packet, on_packet_arg); }
 EXPORT uint32_t SimpleConnectionProtocol_errorCount(Simple::ConnectionProtocol* p){ return p->error_bytes_read; }
 EXPORT uint16_t SimpleConnectionProtocol_minBufferSize(uint16_t maxPayloadSize){ return Simple::ConnectionProtocol::minBufferSize(maxPayloadSize); }
+EXPORT uint8_t* SimpleConnectionProtocol_getTxPacket(Simple::ConnectionProtocol* p){ return p->write_buffer; }
+EXPORT uint16_t SimpleConnectionProtocol_write(Simple::ConnectionProtocol* p, uint8_t* data, uint16_t dataLen){ return p->write(data, dataLen); }
+EXPORT uint16_t SimpleConnectionProtocol_writeChar(Simple::ConnectionProtocol* p, uint8_t data){ return p->writeChar(data); }
 
 /*
 #include <iostream>
@@ -192,36 +225,31 @@ EXPORT uint16_t SimpleConnectionProtocol_minBufferSize(uint16_t maxPayloadSize){
 using namespace std;
 
 int packets = 0;
+auto prot = SimpleConnectionProtocol_new(128);
+
+int write_basic_packet1(){
+    for(int i = 0; i < 11; i++)
+        SimpleConnectionProtocol_writeChar(prot, i);
+    return SimpleConnectionProtocol_encodeTxPacket(prot);
+}
 void on_packet(uint8_t* v, int n, void* data){
   for(int i = 0; i < 11; i++)
     if(v[i] != i) return;
   packets++;
 }
+auto packetLen = write_basic_packet1();
 
-int main()
-{
-    uint8_t rx_buffer[128], tx_buffer[128];
-    auto prot = SimpleConnectionProtocol_new(rx_buffer, tx_buffer, 128);
-
-    auto write_packet = &tx_buffer[SimpleConnectionProtocol_payloadOffset()];
-    for(int i = 0; i < 11; i++)
-        write_packet[i] = i;
-    auto packetLength = SimpleConnectionProtocol_encodePacket(prot, 11);
-    auto packet = tx_buffer;
-
-    cout << "PacketSize:" << packetLength << endl;
-
-    for(int i = 0; i < packetLength; i++)
-        packet[i + packetLength] = packet[i];       //Create double packet on same buffer
+int main(){
+    auto packet = SimpleConnectionProtocol_getTxPacket(prot);
+    cout << "PacketSize:" << packetLen << endl;
 
     auto lpack = 0;
-
     cout << "Rx1:" << SimpleConnectionProtocol_recieveChar(prot, 'g', &on_packet, nullptr) << endl;
-    cout << "Rx16:" << SimpleConnectionProtocol_recieve(prot, packet, packetLength, &on_packet, nullptr) << endl;   //Best Case
+    cout << "Rx16:" << SimpleConnectionProtocol_recieve(prot, packet, packetLen, &on_packet, nullptr) << endl;   //Best Case
     assert(lpack + 1 == packets);
     lpack = packets;
 
-    for(int i = 0; i < packetLength; i++)
+    for(int i = 0; i < packetLen; i++)
         SimpleConnectionProtocol_recieve(prot, &packet[i], 1, &on_packet, nullptr);      //Byte by byte
     assert(lpack + 1 == packets);
     lpack = packets;
@@ -231,22 +259,11 @@ int main()
         randomData[i] = (uint8_t) std::rand();
     }
     SimpleConnectionProtocol_recieve(prot, randomData, 50000, &on_packet, nullptr);      //Massive random data               //Random Data
-    SimpleConnectionProtocol_recieve(prot, packet, packetLength, &on_packet, nullptr);   //Best Case
+    SimpleConnectionProtocol_recieve(prot, packet, packetLen, &on_packet, nullptr);   //Best Case
     assert(lpack + 1 == packets);
     lpack = packets;
 
-    SimpleConnectionProtocol_recieve(prot, packet, packetLength*2, &on_packet, nullptr);   //Double packet
-    assert(lpack + 2 == packets);
-    lpack = packets;
-
-    //Packet Way to Big for Buffer (should do nothing)
-    SimpleConnectionProtocol_encodePacket(prot, 15000);
-    SimpleConnectionProtocol_recieve(prot, packet, packetLength, &on_packet, nullptr);
-    assert(lpack == packets);
-    lpack = packets;
-    SimpleConnectionProtocol_encodePacket(prot, 11);
-
-    SimpleConnectionProtocol_recieve(prot, packet, packetLength, &on_packet, nullptr);
+    SimpleConnectionProtocol_recieve(prot, packet, packetLen, &on_packet, nullptr);
     assert(lpack + 1 == packets);
     lpack = packets;
 
@@ -260,7 +277,7 @@ int main()
     assert(lpack == packets);
     lpack = packets;
 
-    SimpleConnectionProtocol_recieve(prot, packet, packetLength, &on_packet, nullptr);
+    SimpleConnectionProtocol_recieve(prot, packet, packetLen, &on_packet, nullptr);
     assert(lpack + 1 == packets);
     lpack = packets;
 

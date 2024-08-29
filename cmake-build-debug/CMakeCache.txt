@@ -20,6 +20,10 @@ CMAKE_ADDR2LINE:FILEPATH=C:/Program Files/JetBrains/CLion 2024.1.2/bin/mingw/bin
 //Path to a program.
 CMAKE_AR:FILEPATH=C:/Program Files/JetBrains/CLion 2024.1.2/bin/mingw/bin/ar.exe
 
+//For backwards compatibility, what version of CMake commands and
+// syntax should this version of CMake try to support.
+CMAKE_BACKWARDS_COMPATIBILITY:STRING=2.4
+
 //Choose the type of build, options are: None Debug Release RelWithDebInfo
 // MinSizeRel ...
 CMAKE_BUILD_TYPE:STRING=Debug
@@ -258,6 +262,12 @@ ConnectionProtocol_IS_TOP_LEVEL:STATIC=ON
 
 //Value Computed by CMake
 ConnectionProtocol_SOURCE_DIR:STATIC=C:/Users/johna/OneDrive/GNSS/JohnB/CCRepo/ConnectionProtocol
+
+//Single output directory for building all executables.
+EXECUTABLE_OUTPUT_PATH:PATH=
+
+//Single output directory for building all libraries.
+LIBRARY_OUTPUT_PATH:PATH=
 
 
 ########################

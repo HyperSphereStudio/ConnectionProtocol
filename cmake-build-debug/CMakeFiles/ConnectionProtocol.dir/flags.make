@@ -6,5 +6,5 @@ CXX_DEFINES = -DConnectionProtocol_EXPORTS -DEXPORT_WINDOWS=1
 
 CXX_INCLUDES = 
 
-CXX_FLAGS = -g -fdiagnostics-color=always
+CXX_FLAGS = -g -std=gnu++17 -fdiagnostics-color=always
 
